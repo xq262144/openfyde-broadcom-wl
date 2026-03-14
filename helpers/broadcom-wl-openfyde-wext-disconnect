@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+IFACE="${IFACE:-wlan0}"
+STATE_DIR="${STATE_DIR:-/tmp/broadcom-wl-wext}"
+PID_FILE="$STATE_DIR/wpa.pid"
+DHCLIENT_PID="$STATE_DIR/dhclient.pid"
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    echo "[!] run as root" >&2
+    exit 1
+fi
+
+if [[ -f "$PID_FILE" ]]; then
+    pid=$(<"$PID_FILE")
+    if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+fi
+
+if [[ -f "$DHCLIENT_PID" ]]; then
+    pid=$(<"$DHCLIENT_PID")
+    if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+fi
+
+pkill -f "dhcpcd .* $IFACE" 2>/dev/null || true
+pkill -f "dhclient .* $IFACE" 2>/dev/null || true
+ip addr flush dev "$IFACE" 2>/dev/null || true
+ip link set "$IFACE" down 2>/dev/null || true
+rm -rf "$STATE_DIR"
+
+dbus-send --system --print-reply --dest=org.chromium.flimflam / \
+    org.chromium.flimflam.Manager.EnableTechnology string:wifi >/dev/null
+
+echo "[*] manual WEXT connection cleaned up and shill Wi-Fi re-enabled"

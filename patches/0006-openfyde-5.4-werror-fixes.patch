@@ -1,0 +1,36 @@
+diff --git a/src/wl/sys/wl_cfg80211_hybrid.c b/src/wl/sys/wl_cfg80211_hybrid.c
+index 55af17d..1f7be7b 100644
+--- a/src/wl/sys/wl_cfg80211_hybrid.c
++++ b/src/wl/sys/wl_cfg80211_hybrid.c
+@@ -787,10 +787,11 @@
+ 	case NL80211_AUTHTYPE_AUTOMATIC:
+ 		val = 2;
+ 		WL_DBG(("automatic\n"));
+ 		break;
+ 	case NL80211_AUTHTYPE_NETWORK_EAP:
+ 		WL_DBG(("network eap\n"));
++		fallthrough;
+ 	default:
+ 		val = 2;
+ 		WL_ERR(("invalid auth type (%d)\n", sme->auth_type));
+ 		break;
+diff --git a/src/wl/sys/wl_linux.c b/src/wl/sys/wl_linux.c
+index fdf1b7d..5f8cb84 100644
+--- a/src/wl/sys/wl_linux.c
++++ b/src/wl/sys/wl_linux.c
+@@ -773,11 +773,12 @@
+ 	pci_set_master(pdev);
+ 
+ 	pci_read_config_dword(pdev, 0x40, &val);
+-	if ((val & 0x0000ff00) != 0)
++	if ((val & 0x0000ff00) != 0) {
+ 		pci_write_config_dword(pdev, 0x40, val & 0xffff00ff);
+-		bar1_size = pci_resource_len(pdev, 2);
+-		bar1_addr = (uchar *)ioremap_nocache(pci_resource_start(pdev, 2),
+-			bar1_size);
++	}
++	bar1_size = pci_resource_len(pdev, 2);
++	bar1_addr = (uchar *)ioremap_nocache(pci_resource_start(pdev, 2),
++		bar1_size);
+ 	wl = wl_attach(pdev->vendor, pdev->device, pci_resource_start(pdev, 0), PCI_BUS, pdev,
+ 		pdev->irq, bar1_addr, bar1_size);

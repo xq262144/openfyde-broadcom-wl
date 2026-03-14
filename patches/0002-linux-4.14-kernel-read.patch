@@ -1,0 +1,23 @@
+diff --git a/src/shared/linux_osl.c b/src/shared/linux_osl.c
+index 9adc392..cd09e74 100644
+--- a/src/shared/linux_osl.c
++++ b/src/shared/linux_osl.c
+@@ -1074,0 +1075,1 @@ osl_os_get_image_block(char *buf, int len, void *image)
++	loff_t pos;
+@@ -1079,3 +1080,13 @@ osl_os_get_image_block(char *buf, int len, void *image)
+-	rdlen = kernel_read(fp, fp->f_pos, buf, len);
+-	if (rdlen > 0)
+-		fp->f_pos += rdlen;
++	pos = fp->f_pos;
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
++	rdlen = kernel_read(fp, buf, len, &pos);
++#else
++	rdlen = kernel_read(fp, pos, buf, len);
++#endif
++	if (rdlen > 0) {
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
++		fp->f_pos = pos;
++#else
++		fp->f_pos += rdlen;
++#endif
++	}

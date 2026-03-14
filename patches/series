@@ -1,0 +1,6 @@
+0001-linux-4.11-compat.patch
+0002-linux-4.14-kernel-read.patch
+0003-linux-4.15-timer-api.patch
+0004-openfyde-5.4-build-and-ifname.patch
+0005-openfyde-5.4-cfg80211-and-ioctl-compat.patch
+0006-openfyde-5.4-werror-fixes.patch

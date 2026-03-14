@@ -1,0 +1,26 @@
+diff --git a/Makefile b/Makefile
+index d583e54..8d65d91 100644
+--- a/Makefile
++++ b/Makefile
+@@ -115,7 +115,7 @@ GCCVERSION += 00
+ # Remove spaces from the version number
+ GCCVERSION := $(subst $(space),$(empty),$(GCCVERSION))
+ # Crop the version number to 3 decimals.
+-GCCVERSION := $(shell expr `echo $(GCCVERSION)` | cut -b1-3)
+-GE_49 := $(shell expr `echo $(GCCVERSION)` \>= 490)
++GCCVERSION := $(shell expr `echo $(GCCVERSION)` | cut -b1-3)
++GE_49 := 1
+ 
+ EXTRA_CFLAGS :=
+diff --git a/src/wl/sys/wl_linux.c b/src/wl/sys/wl_linux.c
+index 0d05100..2f52178 100644
+--- a/src/wl/sys/wl_linux.c
++++ b/src/wl/sys/wl_linux.c
+@@ -217,7 +217,7 @@
+ #define BRCM_NO_SWAP
+ #endif
+ 
+-#define BRCM_WLAN_IFNAME eth%d
++#define BRCM_WLAN_IFNAME wlan%d
+ 
+ static char intf_name[IFNAMSIZ] = quote_str(BRCM_WLAN_IFNAME);

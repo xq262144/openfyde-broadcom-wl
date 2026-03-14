@@ -1,0 +1,30 @@
+diff --git a/src/wl/sys/wl_cfg80211_hybrid.c b/src/wl/sys/wl_cfg80211_hybrid.c
+index 59a24bf..4a7fef7 100644
+--- a/src/wl/sys/wl_cfg80211_hybrid.c
++++ b/src/wl/sys/wl_cfg80211_hybrid.c
+@@ -35,6 +35,11 @@
+ #include <bcmendian.h>
+ #include <wlioctl.h>
+ #include <proto/802.11.h>
++#include <wl_linux.h>
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
++#include <linux/sched/signal.h>
++#endif
++
+ #include <wl_cfg80211_hybrid.h>
+ 
+ #define EVENT_TYPE(e) dtoh32((e)->event_type)
+diff --git a/src/wl/sys/wl_linux.c b/src/wl/sys/wl_linux.c
+index 0d05100..b0f195f 100644
+--- a/src/wl/sys/wl_linux.c
++++ b/src/wl/sys/wl_linux.c
+@@ -2915,7 +2915,9 @@ wl_monitor(wl_info_t *wl, wl_rxsts_t *rxsts, struct sk_buff *p)
+ 	if (skb == NULL) return;
+ 
+ 	skb->dev = wl->monitor_dev;
++#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
+ 	skb->dev->last_rx = jiffies;
++#endif
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 22)
+ 	skb_reset_mac_header(skb);
+ #else

@@ -1,0 +1,9 @@
+build/
+out/
+dist/
+.DS_Store
+
+config.gz
+kernel.config
+kernel.config.gz
+hybrid-v35_64-nodebug-pcoem-6_30_223_271.tar.gz

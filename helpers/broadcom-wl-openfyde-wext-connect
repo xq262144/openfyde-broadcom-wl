@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+SSID="${1:-}"
+IFACE="${IFACE:-wlan0}"
+STATE_DIR="${STATE_DIR:-/tmp/broadcom-wl-wext}"
+CTRL_DIR="$STATE_DIR/ctrl"
+CONF_FILE="$STATE_DIR/wpa.conf"
+LOG_FILE="$STATE_DIR/wpa.log"
+PID_FILE="$STATE_DIR/wpa.pid"
+DHCLIENT_PID="${DHCLIENT_PID:-$STATE_DIR/dhclient.pid}"
+LEASE_FILE="${LEASE_FILE:-$STATE_DIR/dhclient.leases}"
+DHCLIENT_SCRIPT="${DHCLIENT_SCRIPT:-/usr/local/sbin/broadcom-wl-openfyde-dhclient-script}"
+disable_wifi_done=0
+success=0
+
+usage() {
+    cat <<'EOF'
+Usage:
+  broadcom-wl-openfyde-wext-connect <ssid>
+
+Behavior:
+  - disables Wi-Fi in shill so shill stops forcing nl80211 on wl
+  - reads the saved passphrase for the given SSID from the local shill profile
+  - starts a manual wpa_supplicant instance with -Dwext
+  - runs dhclient on wlan0 after association succeeds
+EOF
+}
+
+cleanup_old_state() {
+    local pid
+
+    if [[ -f "$DHCLIENT_PID" ]]; then
+        pid=$(<"$DHCLIENT_PID")
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    if [[ -f "$PID_FILE" ]]; then
+        pid=$(<"$PID_FILE")
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    pkill -f "dhcpcd .* $IFACE" 2>/dev/null || true
+    rm -rf "$STATE_DIR"
+}
+
+restore_on_error() {
+    if [[ "$success" -eq 1 ]]; then
+        return 0
+    fi
+
+    cleanup_old_state
+    ip addr flush dev "$IFACE" 2>/dev/null || true
+    ip link set "$IFACE" down 2>/dev/null || true
+
+    if [[ "$disable_wifi_done" -eq 1 ]]; then
+        dbus-send --system --print-reply --dest=org.chromium.flimflam / \
+            org.chromium.flimflam.Manager.EnableTechnology string:wifi >/dev/null 2>&1 || true
+    fi
+}
+
+find_passphrase() {
+    local profile
+
+    for profile in /home/root/*/shill/shill.profile /var/cache/shill/default.profile; do
+        [[ -f "$profile" ]] || continue
+        awk -v want="$SSID" '
+            /^\[/ {
+                if (name == want && pass != "") {
+                    print pass
+                    exit
+                }
+                name = ""
+                pass = ""
+                next
+            }
+            /^Name=/ {
+                sub(/^Name=/, "")
+                name = $0
+                next
+            }
+            /^WiFi\.Passphrase=/ {
+                sub(/^WiFi\.Passphrase=/, "")
+                pass = $0
+                next
+            }
+            END {
+                if (name == want && pass != "") {
+                    print pass
+                }
+            }
+        ' "$profile"
+    done | awk 'NF { print; exit }'
+}
+
+wait_for_link() {
+    local attempt
+
+    for attempt in $(seq 1 8); do
+        if iw dev "$IFACE" link | grep -qv "Not connected"; then
+            return 0
+        fi
+        sleep 5
+    done
+
+    return 1
+}
+
+wait_for_ipv4() {
+    local attempt
+
+    for attempt in $(seq 1 12); do
+        if ip -4 -o addr show dev "$IFACE" | grep -q .; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    return 1
+}
+
+if [[ -z "$SSID" ]]; then
+    usage >&2
+    exit 1
+fi
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    echo "[!] run as root" >&2
+    exit 1
+fi
+
+echo "[*] WEXT helper starting for SSID '$SSID' on interface '$IFACE'"
+
+trap restore_on_error ERR
+
+passphrase=$(find_passphrase || true)
+if [[ -z "$passphrase" ]]; then
+    echo "[!] could not find a saved passphrase for SSID '$SSID'" >&2
+    exit 1
+fi
+
+cleanup_old_state
+mkdir -p "$CTRL_DIR"
+
+dbus-send --system --print-reply --dest=org.chromium.flimflam / \
+    org.chromium.flimflam.Manager.DisableTechnology string:wifi >/dev/null
+disable_wifi_done=1
+
+wpa_passphrase "$SSID" "$passphrase" > "$CONF_FILE"
+chmod 600 "$CONF_FILE"
+
+ip link set "$IFACE" down 2>/dev/null || true
+ip addr flush dev "$IFACE" 2>/dev/null || true
+ip link set "$IFACE" up
+iwconfig "$IFACE" power off || true
+
+wpa_supplicant -B -i "$IFACE" -Dwext -c "$CONF_FILE" -C "$CTRL_DIR" -f "$LOG_FILE" -P "$PID_FILE"
+
+if ! wait_for_link; then
+    echo "[!] WEXT association did not complete in time" >&2
+    tail -n 50 "$LOG_FILE" >&2 || true
+    exit 1
+fi
+
+if [[ ! -x "$DHCLIENT_SCRIPT" ]]; then
+    echo "[!] missing dhclient script: $DHCLIENT_SCRIPT" >&2
+    exit 1
+fi
+
+dhclient -4 -nw -pf "$DHCLIENT_PID" -lf "$LEASE_FILE" -sf "$DHCLIENT_SCRIPT" "$IFACE"
+
+if ! wait_for_ipv4; then
+    echo "[!] DHCP did not assign an IPv4 address in time" >&2
+    exit 1
+fi
+
+success=1
+
+echo "[*] manual WEXT connection is up"
+iw dev "$IFACE" link
+ip -4 addr show dev "$IFACE"
+ip route show dev "$IFACE" || true

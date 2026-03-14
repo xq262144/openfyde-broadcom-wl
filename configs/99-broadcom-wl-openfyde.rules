@@ -1,0 +1,1 @@
+ACTION=="add|change", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/local/sbin/broadcom-wl-openfyde-post-up %k"

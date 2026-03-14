@@ -1,0 +1,5 @@
+SSID=YOUR_WIFI_SSID
+IFACE=wlan0
+INITIAL_DELAY=15
+WAIT_SECONDS=90
+STATUS_LOG=/mnt/stateful_partition/var/log/broadcom-wl-openfyde-autoconnect.log
