@@ -257,7 +257,8 @@ release 包里会带两个 helper:
 - 暂时禁用 shill 的 Wi-Fi 管理
 - 对 `wlan0` 启动 `wpa_supplicant -Dwext`
 - 关联成功后运行 `dhclient -4 -nw`
-- 用单独的 `dhclient` hook 给 `wlan0` 配地址和默认路由
+- 用单独的 `dhclient` hook 给 `wlan0` 配地址、默认路由和 DNS resolver
+  - 对 openFyde 当前环境，resolver 会优先写到 `/run/dns-proxy/resolv.conf`
 
 `broadcom-wl-openfyde-wext-disconnect` 会:
 
